@@ -188,8 +188,7 @@ function nearestInteract() {
 }
 
 function updatePlay(dt) {
-  let dir = input.dir;
-  if (!hero.grounded && !dir) dir = hero.airDir || 0;   // направленный прыжок держит курс в воздухе
+  const dir = input.dir;
   if (hero.state === 'lying') {
     if (wakeDelay > 0) wakeDelay -= dt;
     else if (input.any || dir) { hero.state = 'waking'; hero.t = 0; }
@@ -215,16 +214,20 @@ function updatePlay(dt) {
   }
 
   // ходьба
-  const maxV = hero.grab ? 1.6 : 3.6;
-  const targetV = dir * maxV;
-  hero.vx += (targetV - hero.vx) * Math.min(1, dt * (hero.grounded ? 10 : 4));
+  const maxV = hero.grab ? 1.6 : 3.6, JUMP_VX = 4.0;
+  if (hero.grounded) hero.vx += (dir * maxV - hero.vx) * Math.min(1, dt * 10);
+  else if (dir) hero.vx += (dir * JUMP_VX - hero.vx) * Math.min(1, dt * 3);   // в воздухе без касания импульс сохраняется
   if (dir && !hero.grab) hero.face = dir;
+  const setJumpDir = d => { hero.airDir = d; hero.face = d; hero.vx = d * Math.max(JUMP_VX, Math.abs(hero.vx)); };
   if (input.jump && hero.grounded && !hero.grab) {
-    hero.vy = 8.2; hero.grounded = false; audio.step();
-    hero.airDir = input.jumpDir;
-    if (input.jumpDir) { hero.face = input.jumpDir; hero.vx = input.jumpDir * maxV; }
+    hero.vy = 8.2; hero.grounded = false; hero.airT = 0; hero.airDir = 0; audio.step();
+    if (input.jumpDir) setJumpDir(input.jumpDir);
   }
-  if (hero.grounded && hero.vy <= 0) hero.airDir = 0;
+  if (!hero.grounded) {
+    hero.airT = (hero.airT || 0) + dt;
+    // свайп «довернули» в сторону сразу после отрыва — меняем направление прыжка
+    if (hero.airT < 0.3 && input.jumpDir && input.jumpDir !== hero.airDir) setJumpDir(input.jumpDir);
+  } else hero.airT = 99;
 
   const dx = hero.vx * dt;
   if (hero.grab) {
@@ -363,4 +366,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // отладка из консоли
-window.game = { hero, phys, box, bridge, setState: s => (state = s) };
+window.game = { hero, phys, box, bridge, input, setState: s => (state = s) };

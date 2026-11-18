@@ -9,6 +9,10 @@ const HOLD_DELAY = 0.12;   // сек до начала ходьбы (чтобы 
 const TAP_TIME = 0.22;
 const TAP_DIST = 18;       // px
 const SWIPE_DIST = 45;     // px
+const REFINE_TIME = 0.25;  // сек: сколько после старта свайпа ещё можно «довернуть» направление
+
+// наклон больше ~14° от вертикали — прыжок в сторону
+function swipeDir(dx, dy) { return Math.abs(dx) > -dy * 0.25 ? Math.sign(dx) : 0; }
 
 export class Input {
   constructor(el, fx) {
@@ -56,20 +60,29 @@ export class Input {
     const len = Math.hypot(dx, dy);
     // свайп вверх в пределах ~60° от вертикали; наклон задаёт направление прыжка
     if (!p.swiped && len > SWIPE_DIST && -dy > len * 0.5) {
-      p.swiped = true;
+      p.swiped = true; p.swT = this.time;
       this.jump = true;
-      this.jumpDir = Math.abs(dx) > -dy * 0.4 ? Math.sign(dx) : 0;
+      this.jumpDir = swipeDir(dx, dy);
+      // шёл этим пальцем и свайпнул прямо вверх — прыгаем вперёд по ходу
+      if (!this.jumpDir && p.walked) this.jumpDir = p.side;
       this.ripple(p.x, p.y, 1);
-      // палец остался на экране — идём туда, куда прыгнули (прямо вверх — стоим)
-      p.side = this.jumpDir;
+      p.side = this.jumpDir;           // палец остался — идём туда же (прямо вверх — стоим)
       p.t0 = this.time - HOLD_DELAY;
-    }
+    } else if (p.swiped) this.refine(p, dx, dy);
+  }
+
+  // первые доли секунды после старта свайпа уточняем направление по всей траектории пальца
+  refine(p, dx, dy) {
+    if (this.time - p.swT > REFINE_TIME || this.jumpDir) return;
+    const d = swipeDir(dx, dy);
+    if (d) { this.jumpDir = d; p.side = d; }
   }
 
   up(e, cancel) {
     const p = this.ptrs.get(e.pointerId);
     if (!p) return;
     this.ptrs.delete(e.pointerId);
+    if (p.swiped && !cancel) this.refine(p, e.clientX - p.sx, e.clientY - p.sy);
     if (cancel || p.swiped) return;
     const d = Math.hypot(p.x - p.sx, p.y - p.sy);
     if (this.time - p.t0 < TAP_TIME && d < TAP_DIST) this.act = true;
@@ -88,6 +101,7 @@ export class Input {
       if (!p.swiped && p.sy - p.y > TAP_DIST) continue;   // палец уходит вверх — это начинается свайп, не ходьба
       if (!last || p.t0 >= last.t0) last = p;
     }
+    if (last && last.side) last.walked = true;
     return last ? last.side : 0;   // side = 0 у пальца после прыжка прямо вверх
   }
 
