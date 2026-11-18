@@ -188,7 +188,8 @@ function nearestInteract() {
 }
 
 function updatePlay(dt) {
-  const dir = input.dir;
+  let dir = input.dir;
+  if (!hero.grounded && !dir) dir = hero.airDir || 0;   // направленный прыжок держит курс в воздухе
   if (hero.state === 'lying') {
     if (wakeDelay > 0) wakeDelay -= dt;
     else if (input.any || dir) { hero.state = 'waking'; hero.t = 0; }
@@ -218,7 +219,12 @@ function updatePlay(dt) {
   const targetV = dir * maxV;
   hero.vx += (targetV - hero.vx) * Math.min(1, dt * (hero.grounded ? 10 : 4));
   if (dir && !hero.grab) hero.face = dir;
-  if (input.jump && hero.grounded && !hero.grab) { hero.vy = 8.2; hero.grounded = false; audio.step(); }
+  if (input.jump && hero.grounded && !hero.grab) {
+    hero.vy = 8.2; hero.grounded = false; audio.step();
+    hero.airDir = input.jumpDir;
+    if (input.jumpDir) { hero.face = input.jumpDir; hero.vx = input.jumpDir * maxV; }
+  }
+  if (hero.grounded && hero.vy <= 0) hero.airDir = 0;
 
   const dx = hero.vx * dt;
   if (hero.grab) {

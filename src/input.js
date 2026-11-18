@@ -1,6 +1,7 @@
 // Невидимое управление жестами:
 //  удержание левой/правой половины экрана — идти;
-//  свайп вверх — прыжок (можно не отпуская палец — продолжишь идти);
+//  свайп вверх — прыжок на месте, вверх-вправо / вверх-влево — прыжок в эту сторону
+//  (палец можно не отпускать — продолжишь идти туда же);
 //  короткий тап — взаимодействие.
 // Клавиатура для теста на ПК: A/D/стрелки, W/Пробел/↑ — прыжок, E/Enter — действие.
 
@@ -16,6 +17,7 @@ export class Input {
     this.ctx = fx.getContext('2d');
     this.ptrs = new Map();
     this.keys = new Set();
+    this.jumpDir = 0;           // -1/0/1 — наклон свайпа
     this.jump = false;          // одноразовые события — сбрасываются consume()
     this.act = false;
     this.any = false;
@@ -31,7 +33,7 @@ export class Input {
     window.addEventListener('keydown', e => {
       if (e.repeat) return;
       this.keys.add(e.code); this.any = true;
-      if (['KeyW', 'ArrowUp', 'Space'].includes(e.code)) this.jump = true;
+      if (['KeyW', 'ArrowUp', 'Space'].includes(e.code)) { this.jump = true; this.jumpDir = 0; }
       if (['KeyE', 'Enter'].includes(e.code)) this.act = true;
     });
     window.addEventListener('keyup', e => this.keys.delete(e.code));
@@ -51,12 +53,15 @@ export class Input {
     if (!p) return;
     p.x = e.clientX; p.y = e.clientY;
     const dx = p.x - p.sx, dy = p.y - p.sy;
-    if (!p.swiped && -dy > SWIPE_DIST && -dy > Math.abs(dx) * 1.1) {
+    const len = Math.hypot(dx, dy);
+    // свайп вверх в пределах ~60° от вертикали; наклон задаёт направление прыжка
+    if (!p.swiped && len > SWIPE_DIST && -dy > len * 0.5) {
       p.swiped = true;
       this.jump = true;
+      this.jumpDir = Math.abs(dx) > -dy * 0.4 ? Math.sign(dx) : 0;
       this.ripple(p.x, p.y, 1);
-      // после свайпа палец может остаться — тогда идём в сторону, где он сейчас
-      p.side = p.x < innerWidth / 2 ? -1 : 1;
+      // палец остался на экране — идём туда, куда прыгнули (прямо вверх — стоим)
+      p.side = this.jumpDir;
       p.t0 = this.time - HOLD_DELAY;
     }
   }
@@ -78,8 +83,12 @@ export class Input {
     if (d) return d;
     // последний удерживаемый палец главнее
     let last = null;
-    for (const p of this.ptrs.values()) if (this.time - p.t0 >= HOLD_DELAY) if (!last || p.t0 >= last.t0) last = p;
-    return last ? last.side : 0;
+    for (const p of this.ptrs.values()) {
+      if (this.time - p.t0 < HOLD_DELAY) continue;
+      if (!p.swiped && p.sy - p.y > TAP_DIST) continue;   // палец уходит вверх — это начинается свайп, не ходьба
+      if (!last || p.t0 >= last.t0) last = p;
+    }
+    return last ? last.side : 0;   // side = 0 у пальца после прыжка прямо вверх
   }
 
   consume() { this.jump = false; this.act = false; this.any = false; }
