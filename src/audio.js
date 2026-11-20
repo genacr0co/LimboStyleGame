@@ -74,5 +74,16 @@ export class Audio {
     }
     this.hit(180, 0.25, 0.4 * vol);
   }
+  // взгляд великана: низкий нарастающий гул
+  gaze(vol = 1) {
+    if (!this.ctx) return;
+    const c = this.ctx, t = c.currentTime;
+    for (const f of [38, 57, 76.5]) {
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = 'triangle'; o.frequency.setValueAtTime(f, t); o.frequency.linearRampToValueAtTime(f * 0.94, t + 2.6);
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.13 * vol, t + 0.5); g.gain.exponentialRampToValueAtTime(0.0001, t + 2.8);
+      o.connect(g).connect(this.master); o.start(t); o.stop(t + 3);
+    }
+  }
   snap() { this.hit(1800, 0.08, 0.7); this.hit(150, 0.5, 0.8); }
 }

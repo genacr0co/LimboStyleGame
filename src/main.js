@@ -30,13 +30,13 @@ const SEG_A = [[-40, 0], [5, 0], [8, 0.3], [11, 0.1], [13, 0.1], [18, 0.4], [22,
 const SEG_B = [[27.8, 0.2], [30, 0.1], [37.6, 0], [37.61, 2.2], [44, 2.35], [50, 2.3], [55, 2.2], [55.01, 0], [62, 0]];
 const SEG_C = [[70, 0], [78, 0.3], [86, 0], [95, 0.2], [104, 0.2], [160, 0]];
 const world = new World(scene, phys, ink);
-world.clearing = 92;
+world.clearing = 87;
 world.ground([SEG_A, SEG_B, SEG_C], [[...SEG_A, ...SEG_B], SEG_C]);
 world.layers(-30, 140, [61.5, 70.5, 16]);
 world.rays(-20, 130);
 world.mist(-30, 140);
 world.dust();
-world.giant(93, -40);
+world.giant(87, -40);
 
 // бревно (препятствие для прыжка)
 const logY = phys.heightAt(14);
@@ -168,13 +168,14 @@ const hero = new Hero(scene, ink);
 const START_X = 2;
 hero.x = START_X; hero.y = phys.heightAt(START_X); hero.grounded = true;
 
-const checkpoints = [2, 20, 31, 41, 57, 74];
+const checkpoints = [2, 20, 31, 41, 57, 72, 81, 88.5];
 let cp = { x: START_X, box: { x: box.x } };
 const hints = [
   { x: -999, key: 'hint_move', shown: false },
   { x: 10.5, key: 'hint_jump', shown: false },
   { x: 31.2, key: 'hint_grab', shown: false },
   { x: 58, key: 'hint_lever', shown: false },
+  { x: 70.5, key: 'hint_hide', shown: false },
 ];
 
 const textEl = $('text');
@@ -196,7 +197,7 @@ function start() {
 function die(kind) {
   if (hero.state === 'dead') return;
   hero.state = 'dead'; hero.t = 0; hero.grab = null; deadT = 0;
-  if (kind === 'trap') { audio.snap(); trap.snapped = true; } else audio.land();
+  if (kind === 'trap') { audio.snap(); trap.snapped = true; } else if (kind === 'seen') audio.thud(); else audio.land();
 }
 
 function respawn() {
@@ -205,6 +206,7 @@ function respawn() {
   hero.body.rotation.y = 0;
   if (!bridge.plat.on) { box.x = cp.box.x; box.y = phys.heightAt(box.x) + 0.3; box.vy = 0; box.grounded = false; }
   trap.snapped = false;
+  count.phase = 'rest'; count.t = -1.5; count.n = 0;
 }
 
 function nearestInteract() {
@@ -327,20 +329,56 @@ function updateObjects(dt) {
   bridgePivot.rotation.z = bridge.a;
 }
 
-// Считающий: глухие удары сериями по пять, рука великана отбивает счёт
-const count = { t: 0, n: 0 };
+// Считающий: пять глухих ударов → оборачивается и смотрит. Кто не спрятался — посчитан.
+// Укрытие — густой куст: стоять внутри и не двигаться.
+const bush = [];
+const COUNT_FROM = 73, COUNT_TO = lampX - 2.5;
+const bushes = [77.5, 85, 92.5];
+for (const bx of bushes) {
+  const G = new THREE.Group(); G.position.set(bx, phys.heightAt(bx), 0); scene.add(G);
+  const r = (a, b) => a + Math.random() * (b - a);
+  for (let i = 0; i < 9; i++) {   // листва вокруг героя со всех сторон по z
+    const m = new THREE.Mesh(new THREE.IcosahedronGeometry(r(0.3, 0.5), 1), ink);
+    m.position.set(r(-0.8, 0.8), r(0.3, 1.1), i % 3 === 0 ? r(0.5, 1.3) : r(-1.4, -0.3));
+    m.scale.y = r(0.7, 1.1); G.add(m);
+  }
+  for (let i = 0; i < 44; i++) {  // торчащие стебли — рваный силуэт
+    const h = r(0.6, 1.7), c = new THREE.Mesh(new THREE.ConeGeometry(0.035, h, 3), ink);
+    c.position.set(r(-0.95, 0.95), h / 2, r(-1.3, 1.4)); c.rotation.z = r(-0.5, 0.5); G.add(c);
+  }
+  G.userData.rustle = 0;
+  bush.push(G);
+}
+function heroHidden() {
+  return hero.grounded && Math.abs(hero.vx) < 0.6 && bushes.some(b => Math.abs(hero.x - b) < 0.7);
+}
+
+const count = { phase: 'rest', t: 0, n: 0, look: 0 };
 function updateCount(dt) {
-  if (state !== 'play' && state !== 'end') return;
-  const near = THREE.MathUtils.smoothstep(hero.x, 60, 92);
-  if (near <= 0) { count.n = 0; count.t = 0; return; }
+  const near = THREE.MathUtils.smoothstep(hero.x, 55, 92);
+  // кусты шевелятся, когда сквозь них идёшь
+  for (const G of bush) {
+    if (Math.abs(hero.x - G.position.x) < 1 && Math.abs(hero.vx) > 0.6) G.userData.rustle = 1;
+    G.userData.rustle = Math.max(0, G.userData.rustle - dt * 2);
+    G.rotation.z = Math.sin(time * 18) * 0.04 * G.userData.rustle;
+  }
+  const lookTarget = count.phase === 'look' ? 1 : 0;
+  count.look += (lookTarget - count.look) * Math.min(1, dt * (lookTarget ? 3 : 1.5));
+  world.giantLook = count.look;
+  if (near <= 0 || state !== 'play') { count.phase = 'rest'; count.t = 0; count.n = 0; return; }
+
   count.t += dt;
-  const gap = count.n < 5 ? 1.15 : 5.5;
-  if (count.t >= gap) {
-    count.t = 0;
-    count.n = count.n < 5 ? count.n + 1 : 1;
+  if (count.phase === 'rest' && count.t > 2.2) { count.phase = 'count'; count.t = 0; count.n = 0; }
+  else if (count.phase === 'count' && count.t > 1.15) {
+    count.t = 0; count.n++;
     audio.knock(0.25 + near * 0.75, count.n === 5);
     world.giantKnock = 1;
-    if (count.n === 5) shake = Math.max(shake, 0.25 * near);
+    if (count.n === 4) shake = Math.max(shake, 0.12 * near);
+    if (count.n === 5) { count.phase = 'look'; shake = Math.max(shake, 0.3 * near); audio.gaze(near); }
+  } else if (count.phase === 'look') {
+    const inZone = hero.x > COUNT_FROM && hero.x < COUNT_TO && hero.state === 'play';
+    if (count.t > 0.45 && count.t < 2.6 && inZone && !heroHidden()) { die('seen'); shake = 0.8; }
+    if (count.t > 2.8) { count.phase = 'rest'; count.t = 0; }
   }
 }
 
@@ -411,4 +449,4 @@ function frame(now) {
 requestAnimationFrame(frame);
 
 // отладка из консоли
-window.game = { hero, phys, box, bridge, input, setState: s => (state = s) };
+window.game = { hero, phys, box, bridge, input, count, setState: s => (state = s) };

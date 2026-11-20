@@ -285,7 +285,16 @@ export class World {
     for (const a of [armL, armR]) { const o = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.9, 30, 5), m); o.position.y = -15; a.add(o); }
     const head = new THREE.Group(); head.position.set(0, 52, 0); G.add(head);
     const hm = new THREE.Mesh(new THREE.SphereGeometry(3.6, 12, 10), m); hm.scale.set(0.9, 1.25, 0.9); head.add(hm);
-    G.position.set(x, -3, z); G.scale.setScalar(0.42);
+    // глаза — видны только когда он оборачивается (сзади их закрывает голова)
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.3, 'rgba(255,255,255,0.95)'); gr.addColorStop(0.45, 'rgba(255,255,255,0.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+    const eyeMat = new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(c), color: 0xfffbe8, transparent: true,
+      opacity: 0, depthWrite: false, fog: false, blending: THREE.AdditiveBlending });
+    for (const ex of [-1.1, 1.1]) { const e = new THREE.Sprite(eyeMat); e.position.set(ex, 0.5, 3.7); e.scale.setScalar(3.4); head.add(e); }
+    this.giantEyes = eyeMat;
+    G.position.set(x, -8, z); G.scale.setScalar(0.42);
     G.rotation.y = 0.4;
     this.scene.add(G);
     this.giantObj = { G, head, armL, armR };
@@ -296,8 +305,12 @@ export class World {
     this.skyMesh.position.x = cam.position.x * 0.9;
     if (this.giantObj) {
       const { G, head, armL, armR } = this.giantObj;
-      const look = THREE.MathUtils.clamp((heroX - G.position.x) * 0.02, -0.7, 0.7);
-      head.rotation.y += (look - head.rotation.y) * 0.004;
+      // спиной к нам, пока считает; на пятом ударе оборачивается к герою
+      const gl = this.giantLook || 0, e = gl * gl * (3 - 2 * gl);
+      const toward = THREE.MathUtils.clamp((heroX - G.position.x) * 0.02, -0.5, 0.5) - G.rotation.y;
+      head.rotation.y = Math.PI + (toward - Math.PI) * e;
+      G.rotation.y = 0.4 - e * 0.25;
+      this.giantEyes.opacity = THREE.MathUtils.smoothstep(e, 0.6, 1) * (0.85 + Math.sin(t * 9) * 0.1);
       head.rotation.z = Math.sin(t * 0.21) * 0.05 + 0.12;
       armL.rotation.z = Math.sin(t * 0.17) * 0.02;
       this.giantKnock = Math.max(0, (this.giantKnock || 0) - 0.03);
