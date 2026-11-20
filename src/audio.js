@@ -61,5 +61,18 @@ export class Audio {
     g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.12, t + 0.1); g.gain.exponentialRampToValueAtTime(0.001, t + 0.9);
     o.connect(f).connect(g).connect(this.master); o.start(t); o.stop(t + 1);
   }
+  // удар счёта: низкий деревянный стук с эхом
+  knock(vol = 1, last = false) {
+    if (!this.ctx) return;
+    const c = this.ctx, t = c.currentTime;
+    for (const [dl, k] of [[0, 1], [0.32, 0.35], [0.7, 0.12]]) {
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = 'sine'; o.frequency.setValueAtTime(last ? 52 : 64, t + dl); o.frequency.exponentialRampToValueAtTime(34, t + dl + 0.5);
+      g.gain.setValueAtTime(0.0001, t + dl); g.gain.exponentialRampToValueAtTime(0.6 * vol * k, t + dl + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dl + (last ? 1.2 : 0.6));
+      o.connect(g).connect(this.master); o.start(t + dl); o.stop(t + dl + 1.3);
+    }
+    this.hit(180, 0.25, 0.4 * vol);
+  }
   snap() { this.hit(1800, 0.08, 0.7); this.hit(150, 0.5, 0.8); }
 }

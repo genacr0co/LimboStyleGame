@@ -1,7 +1,7 @@
 // Все тексты игры — только здесь (RU/EN).
 const dict = {
   ru: {
-    title: 'БЕЗ ИМЕНИ',
+    title: 'ЗАРУБКИ',
     tap_to_start: 'коснись экрана',
     rotate: 'поверни телефон горизонтально',
     hint_move: 'удерживай край экрана — иди',
@@ -12,7 +12,7 @@ const dict = {
     end_sub: 'коснись, чтобы начать заново',
   },
   en: {
-    title: 'NAMELESS',
+    title: 'TALLY',
     tap_to_start: 'touch the screen',
     rotate: 'rotate your phone to landscape',
     hint_move: 'hold the screen edge — walk',

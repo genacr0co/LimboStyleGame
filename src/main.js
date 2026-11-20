@@ -136,6 +136,33 @@ const lampX = 101;
   world.anim.push(tt => { glow.material.opacity = 0.65 + Math.sin(tt * 7) * 0.05 + (Math.random() < 0.02 ? -0.4 : 0); });
 }
 
+// деревья с зарубками: каждая черта — посчитанный ребёнок; группы по 5 (IIII + перечёркивание)
+const notchMat = new THREE.MeshBasicMaterial({ color: 0x8f8d82 });
+const freshMat = new THREE.MeshBasicMaterial({ color: 0xd8d4c4, fog: false });
+function tallyTree(x, z, marks, fresh = false) {
+  const y0 = phys.heightAt(x), r = 0.38;
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.7, r, 22, 8), ink);
+  trunk.position.set(x, y0 + 10.5, z); scene.add(trunk);
+  const cut = new THREE.BoxGeometry(0.028, 0.2, 0.02);
+  const fz = z + r * 0.93;
+  for (let i = 0; i < marks; i++) {
+    // у «свежего» дерева счёт идёт сверху вниз — последняя черта на уровне головы героя
+    const g = Math.floor(i / 5), k = i % 5, G = Math.ceil(marks / 5);
+    const row = fresh ? y0 + 1.05 + (G - 1 - g) * 0.3 : y0 + 0.75 + g * 0.3;
+    const last = fresh && i === marks - 1;
+    const m = new THREE.Mesh(cut, last ? freshMat : notchMat);
+    if (k < 4) m.position.set(x - 0.09 + k * 0.06, row, fz);
+    else { m.position.set(x, row, fz + 0.01); m.rotation.z = 1.05; m.scale.y = 1.35; }
+    scene.add(m);
+  }
+}
+tallyTree(6.5, -1.6, 7);
+tallyTree(16.5, -1.4, 13);
+tallyTree(34.5, -1.8, 4);
+tallyTree(52.5, -1.5, 19);
+tallyTree(76, -1.6, 24);
+tallyTree(lampX - 2.6, -1.3, 31, true);   // последняя черта — свежая: на уровне роста героя
+
 // ---------- Герой ----------
 const hero = new Hero(scene, ink);
 const START_X = 2;
@@ -300,6 +327,23 @@ function updateObjects(dt) {
   bridgePivot.rotation.z = bridge.a;
 }
 
+// Считающий: глухие удары сериями по пять, рука великана отбивает счёт
+const count = { t: 0, n: 0 };
+function updateCount(dt) {
+  if (state !== 'play' && state !== 'end') return;
+  const near = THREE.MathUtils.smoothstep(hero.x, 60, 92);
+  if (near <= 0) { count.n = 0; count.t = 0; return; }
+  count.t += dt;
+  const gap = count.n < 5 ? 1.15 : 5.5;
+  if (count.t >= gap) {
+    count.t = 0;
+    count.n = count.n < 5 ? count.n + 1 : 1;
+    audio.knock(0.25 + near * 0.75, count.n === 5);
+    world.giantKnock = 1;
+    if (count.n === 5) shake = Math.max(shake, 0.25 * near);
+  }
+}
+
 let shake = 0;
 function updateCamera(dt) {
   const ahead = hero.face * 1.6 + hero.vx * 0.25;
@@ -354,6 +398,7 @@ function frame(now) {
   updateObjects(dt);
   hero.animate(dt, phys.support(hero), hero.vx);
   updateCamera(dt);
+  updateCount(dt);
   world.update(time, camera, hero.x);
   audio.update(time, THREE.MathUtils.smoothstep(hero.x, 70, 95));
 

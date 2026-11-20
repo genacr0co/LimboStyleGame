@@ -300,7 +300,8 @@ export class World {
       head.rotation.y += (look - head.rotation.y) * 0.004;
       head.rotation.z = Math.sin(t * 0.21) * 0.05 + 0.12;
       armL.rotation.z = Math.sin(t * 0.17) * 0.02;
-      armR.rotation.z = -Math.sin(t * 0.19 + 1) * 0.02;
+      this.giantKnock = Math.max(0, (this.giantKnock || 0) - 0.03);
+      armR.rotation.z = -Math.sin(t * 0.19 + 1) * 0.02 + this.giantKnock * this.giantKnock * 0.35;
     }
   }
 }
